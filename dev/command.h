@@ -10,6 +10,13 @@ char server_username[MAX_STRING_SIZE] = "";
 //------------------------------------------------
 // help:
 
+bool is_client_logged()
+{
+    if(0 == server_username[0])
+        return false;
+    return true;
+}
+
 bool is_present(const char* const username) 
 {
     FILE* file = fopen(path_database, "r");
@@ -36,31 +43,49 @@ char* get_argument(const char* const command)
 
 char* get_logged_users()
 {
-    size_t count = 0, 
-    size_line = UT_NAMESIZE + UT_HOSTSIZE + sizeof(int32_t);
+    if(!is_client_logged())
+    {
+        const char buffer[] = "you must login before.";
+        return convert_line(buffer);
+    }
     
     setutent();
-    struct utmp* user = getutent();
-    
-    char* message = (char*)malloc(count * size_line);
-    
-    for(struct utmp* user = getutent(); user; user = getutent())
+    char buffer[MAX_OUTPUT_SIZE];
+    for(struct utmp *user = getutent(); user; user = getutent()) 
     {
-        //strcpy(message, user->ut_user); // username
-        strcat(message, " ");
-        //strcat(message, user->ut_host); // hostname 
-        strcat(message, " ");
+        // compute partial buffer
+        char user_info[MAX_STRING_SIZE];
+        if (USER_PROCESS == user->ut_type) 
+        {
+            strcat(buffer, "user: \""); // maximum 32 bytes
+            strcat(buffer, user->ut_user);
+            //strcat(buffer, "\", host: \""); // maximum 256 bytes
+            //strcat(buffer, user->ut_host);
+            strcat(buffer, "\", time: ");
+            
+            char number[MAX_STRING_SIZE];
+            sprintf(number, "%d", user->ut_tv.tv_sec);
+            strcat(buffer, number);
+            strcat(buffer, "\n");
+        }
 
-        char string[MAX_STRING_SIZE];
-        //strcat(message, itoa(user->ut_tv.tv_sec, string, 10)); // time entry in seconds
+        // add to final buffer
+        strcat(buffer, user_info);
     }
-
-    return message;
+    
+    endutent();
+    return convert_line(buffer);
 }
      
 char* get_proc_info(const char* const command)
 {
-    /*
+    // case 0
+    if(!is_client_logged())
+    {
+        const char buffer[] = "you must login before.";
+        return convert_line(buffer);
+    }
+
     char pid[MAX_STRING_SIZE];
     strcpy(pid, get_argument(command));
 
@@ -70,42 +95,40 @@ char* get_proc_info(const char* const command)
 
     FILE* file = fopen(path, "r");
     
-    int n = 0;
-    char* message = 0;
-
-    // valid pid
-    if(file && strstr(command, "get-proc-info : "))
+    // invalid pid
+    if(NULL == file)
     {
-        message = (char*)malloc(1024);
-        char* buffer = 0;
-        size_t buffer_size = 0; 
-        
-        while(getline(&buffer, &buffer_size, file) != -1)
-        {
-            if(strstr(buffer, "Name: ") ||
-            strstr(buffer, "State: ") ||
-            strstr(buffer, "PPid: ") ||
-            strstr(buffer, "Uid: ") ||
-            strstr(buffer, "VmSize: ")            
-            )
-                strcat(message, buffer);
-                strcat(message, "\n");
-        }
+        const char buffer[] = "invalid pid.";
+        return convert_line(buffer);
+    }
     
-        return message;
+    // valid pid
+    char buffer[MAX_OUTPUT_SIZE];
+    size_t line_size = MAX_OUTPUT_SIZE; 
+        
+    for(;;)
+    {
+        char* line = 0;
+        int bytes = getline(&line, &line_size, file);
+        var_call(bytes);
+        if(0 == bytes)
+            break;
+
+        if(strstr(line, "Name: ") ||
+            strstr(line, "State: ") ||
+            strstr(line, "PPid: ") ||
+            strstr(line, "Uid: "))
+            strcat(buffer, line);
+        if(strstr(line, "VmSize: "))
+        {
+            strcat(buffer, line);
+            break;
+        }
+
+        free(line);
     }
 
-    // invalid pid
-    const char errorM[] = "invalid pid.\n";
-    
-    n = strlen(errorM);
-    message = (char*)malloc(2 + n + 1);
-    sprintf(message, "%d", n);
-    strcat(message, errorM);
-    message[2 + n] = 0;
-    */
-    char* message = (char*)malloc(1);
-    return message;
+    return convert_line(buffer);
 }
 
 //------------------------------------------------
@@ -113,7 +136,7 @@ char* get_proc_info(const char* const command)
 char* const login_user(const char* const command)
 {    
     char* username = get_argument(command);
-    if(is_present(username) && 0 == server_username[0])
+    if(is_present(username) && false == is_client_logged())
     {
         strcpy(server_username, username);
 
@@ -129,7 +152,7 @@ char* const login_user(const char* const command)
 
 char* logout_user()
 {
-    if(server_username[0]) // if logged-in
+    if(is_client_logged())
     {
         char buffer[MAX_OUTPUT_SIZE] = "we will miss you, ";
         strcat(buffer, server_username);
