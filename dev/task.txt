@@ -1,0 +1,20 @@
+two applications (pipes, fifos, socketpairs) (named "client" and "server"), specifications:
+
+- the communication: commands read from the keyboard in client, executed in child processes of server;
+- the commands are strings bounded by a new line;
+- the responses are series of bytes prefixed by the length of the response;
+- the result obtained from the execution of any command will be displayed on screen by the client app;
+- the child processes in the server app communicate just with the parent process;
+
+- the minimal protocol includes the following commands (first 3 in child process):
+    - "login : username"    - whose existence is validated by using a configuration file, which contains all the users that have access to the functionalities.
+    - "get-logged-users"    - need login - displays information (username, hostname for remote login, time entry was made) about all users that are logged in the operating system (see "man 5 utmp" and "man 3 getutent").
+    - "get-proc-info : pid" - need login - displays information (name, state, ppid, uid, vmsize) about the process whose pid is specified (source of information: the file /proc/<pid>/status).
+    - "logout";
+    - "quit".
+
+- extra:
+    - 04 <= size of command <= 99 (still the first two bytes are for the number)
+    - 10 <= size of output <= 99
+
+    - rm dev/client-server-fifo dev/server-client-fifo
